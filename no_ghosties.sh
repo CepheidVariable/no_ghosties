@@ -17,6 +17,50 @@ if [[ "${2:-}" == "--dry-run" ]]; then
     DRY_RUN=true
 fi
 
+# Declare global variable for hook usage
+initial_orphans=""
+new_orphans=()
+
+################################################
+# HOOK: Capture pre-removal orphan list
+################################################
+pre_removal_hook() {
+    initial_orphans=$(pacman -Qtdq 2>/dev/null || true)
+}
+
+################################################
+# HOOK: Determine new orphans and optionally remove
+################################################
+post_removal_hook() {
+    final_orphans=$(pacman -Qtdq 2>/dev/null || true)
+
+    # Determine initial vs final orphans
+    mapfile -t new_orphans < <(
+        comm -13 \
+        <(sort <<< "$initial_orphans") \
+        <(sort <<< "$final_orphans")
+    )
+
+    if [[ ${#new_orphans[@]} -gt 0 ]]; then
+        echo "New orphaned packages created by this operation:"
+        printf '  - %s\n' "${new_orphans[@]}"
+        echo
+        read -rp "Remove these new orphaned packages? [y/N] " confirm_orphans
+        if [[ "$confirm_orphans" =~ ^[Yy]$ ]]; then
+            if [[ "$DRY_RUN" == true ]]; then
+                echo "[DRY-RUN] Would remove new orphaned packages."
+            else
+                sudo pacman -Rns "${new_orphans[@]}"
+            fi
+        else
+            echo "Skipping new orphan removal."
+        fi
+    else
+        echo "No new orphaned packages detected."
+    fi
+}
+
+
 if [[ ! -f "$PACKAGE_FILE" ]]; then
     echo "Package list file not found: $PACKAGE_FILE"
     exit 1
@@ -72,6 +116,10 @@ if [[ ${#installed[@]} -eq 0 ]]; then
     exit 0
 fi
 
+# Run pre-removal hooks
+pre_removal_hook
+
+# Remove installed packages
 read -rp "Do you want to remove the installed packages? [y/N] " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
     if [[ "$DRY_RUN" == true ]]; then
@@ -84,22 +132,5 @@ else
     exit 0
 fi
 
-echo "Checking for orphaned packages..."
-orphans=$(pacman -Qtdq) || true
-if [[ -n "$orphans" ]]; then
-    echo "Orphaned packages detected:"
-    echo "$orphans"
-    echo
-    read -rp "Remove all orphaned packages? [y/N] " confirm_orphans
-    if [[ "$confirm_orphans" =~ ^[Yy]$ ]]; then
-        if [[ "$DRY_RUN" == true ]]; then
-            echo "[DRY-RUN] Simulating removal of orphans."
-        else
-            sudo pacman -Rns $orphans
-        fi
-    else
-        echo "Skipping orphan removal."
-    fi
-else
-    echo "No orphaned packages found."
-fi
+# Run post-removal hooks
+post_removal_hook
