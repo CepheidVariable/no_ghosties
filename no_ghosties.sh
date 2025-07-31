@@ -22,26 +22,51 @@ if [[ ! -f "$PACKAGE_FILE" ]]; then
     exit 1
 fi
 
+echo "==================================="
+echo "Package removal audit initialized."
+echo "Reading target packages from: $PACKAGE_FILE"
+[[ "$DRY_RUN" == true ]] && echo "*** DRY_RUN MODE ENABALED ***"
+echo "-----------------------------------"
+
+mapfile -t all_packages < <(grep -Ev '^\s*#|^\s*$' "$PACKAGE_FILE")
+
+if [[ ${#all_packages[@]} -eq 0 ]]; then
+    echo "No valid package names found in file."
+    exit 0
+fi
+
+echo "Target packages to evaluate:"
+for pkg in "${all_packages[@]}"; do
+    echo "  - $pkg"
+done
+echo "==================================="
+
 installed=()
 not_installed=()
 
-while IFS= read -r pkg || [[ -n "$pkg" ]]; do
-    [[ -z "$pkg" || "$pkg" =~ ^# ]] && continue  # skip empty or commented lines
+for pkg in "${all_packages[@]}"; do
     if pacman -Q "$pkg" &>/dev/null; then
         installed+=("$pkg")
     else
         not_installed+=("$pkg")
     fi
-done < "$PACKAGE_FILE"
+done
 
+# Summary
 echo "====== Package Check Summary ======"
+
 echo "Installed packages:"
-printf '  - %s\n' "${installed[@]}"
+if [[ ${#installed[@]} -eq 0 ]]; then
+    echo "  (none found)"
+else
+    printf '  - %s\n' "${installed[@]}"
+fi
 echo
-echo "Not installed packages:"
+echo "Packages not installed:"
 printf '  - %s\n' "${not_installed[@]}"
 echo "==================================="
 
+# Exit early if nothing to do
 if [[ ${#installed[@]} -eq 0 ]]; then
     echo "No installed packages to remove."
     exit 0
