@@ -72,15 +72,16 @@ if [[ ${#installed[@]} -eq 0 ]]; then
     exit 0
 fi
 
-if [[ "$DRY_RUN" == true ]]; then
-    echo "[DRY-RUN] Simulating removal of packages: ${installed[*]}"
-else
-    read -rp "Do you want to remove the installed packages? [y/N] " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        sudo pacman -Rns "${installed[@]}"
+read -rp "Do you want to remove the installed packages? [y/N] " confirm
+if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+        echo "[DRY-RUN] Simulating removal of packages: ${installed[*]}"
     else
-        echo "Aborted. No packages were removed."
+        sudo pacman -Rns "${installed[@]}"
     fi
+else
+    echo "Aborted. No packages were removed."
+    exit 0
 fi
 
 echo "Checking for orphaned packages..."
