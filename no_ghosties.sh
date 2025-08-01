@@ -78,6 +78,11 @@ post_removal_hook_clean_orphans() {
 }
 
 #====================MAIN SCRIPT====================
+if [[ ! -f "$PKG_LIST_FILE" ]]; then
+    echo "Error: File not found. Exiting."
+    usage
+fi
+
 echo "==================================="
 echo "Package removal audit initialized."
 echo "Reading target packages from: $PKG_LIST_FILE"
